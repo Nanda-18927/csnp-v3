@@ -1,8 +1,12 @@
-# CSNP v3 — Crime Sight Noir
+# Crime Sight Noir — v3
 
-A 3D police intelligence dashboard for peninsular South India. Flask + SQLite
-backend, single-page vanilla-JS frontend, every screen rendered as WebGL
-geometry rather than 2D charts.
+*Version 3 of the Crime Sight Noir project.*
+
+A 3D police intelligence dashboard for peninsular South India. Flask and SQLite
+on the server, a single-page vanilla-JavaScript client, every screen rendered as
+WebGL geometry rather than as flat charts.
+
+**Live deployment:** https://nanda27.pythonanywhere.com/
 
 ---
 
