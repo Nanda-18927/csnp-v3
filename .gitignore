@@ -1,0 +1,14 @@
+# Secrets — never commit a filled-in copy
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# The database is rebuilt automatically from database/*.sql on first run.
+backend/crimesight.db
+
+# Generated from the Markdown docs by docs/build_pdf.py
+docs/CRIME-SIGHT-NOIR.html
