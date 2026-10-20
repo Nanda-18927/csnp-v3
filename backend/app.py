@@ -862,9 +862,9 @@ def _role_of():
 def _require(action):
     role = _role_of()
     table = {
-        # A Public account may file an FIR and nothing else. Officers,
-        # criminals and user records are closed to them.
-        "add_case": ("public", "police", "admin"),
+        # A Public account may only view records. Officers, criminals, FIRs
+        # and user records are closed to them.
+        "add_case": ("police", "admin"),
         "add": ("police", "admin"),
         "edit": ("police", "admin"),
         "delete": ("admin",),

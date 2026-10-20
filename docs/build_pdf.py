@@ -232,7 +232,7 @@ def build():
     <tr><td>Backend</td><td>Python 3.12 &middot; Flask &middot; flask-cors</td></tr>
     <tr><td>Database</td><td>SQLite &middot; 6 tables &middot; no ORM</td></tr>
     <tr><td>Data</td><td>6,006 stations &middot; 212 criminals &middot; 191 officers &middot; 274 FIRs</td></tr>
-    <tr><td>Tests</td><td>117 assertions, throwaway database</td></tr>
+    <tr><td>Tests</td><td>132 assertions, throwaway database</td></tr>
     <tr><td>Dependencies</td><td>2 third-party packages, both server-side</td></tr>
   </table>
   <div class="foot">Educational / coursework project. All station, officer and

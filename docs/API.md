@@ -34,7 +34,7 @@ Missing → `401`. Malformed or wrong role → `403`.
 | Action | public | police | admin |
 | --- | :-: | :-: | :-: |
 | read any record | ✅ | ✅ | ✅ |
-| file an FIR (`add_case`) | ✅ | ✅ | ✅ |
+| file an FIR (`add_case`) | | ✅ | ✅ |
 | create officer / criminal (`add`) | | ✅ | ✅ |
 | edit records (`edit`) | | ✅ | ✅ |
 | delete records (`delete`) | | | ✅ |
@@ -56,6 +56,17 @@ Missing → `401`. Malformed or wrong role → `403`.
 
 Police additionally require `badge`, `rank`, `stationCode`. Govt Officials
 require `officialId`, `designation`, `department`.
+
+`portal` is optional. When it is present it must equal `role`, because each
+role has its own front door and a portal registers its own role and no other:
+
+```json
+{ "name": "Asha Menon", "username": "asham", "password": "secret123",
+  "role": "public", "portal": "public", "email": "asha@example.com" }
+```
+
+`400` if `portal` names another role, so the Public portal cannot be used to
+mint a police or government account.
 
 ```json
 { "username": "asham", "role": "public", "token": "csn-public-9f2c…",

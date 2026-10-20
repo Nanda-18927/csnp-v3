@@ -272,6 +272,7 @@ def signup():
     username = str(data.get("username") or "").strip()
     password = str(data.get("password") or "")
     role = str(data.get("role") or "public").strip()
+    portal = str(data.get("portal") or "").strip().lower()
     station_code = data.get("stationCode") or None
 
     if not name or not username or not password:
@@ -284,6 +285,15 @@ def signup():
         return jsonify({"error": "Password must be at least 6 characters"}), 400
     if role not in _ROLES:
         return jsonify({"error": f"role must be one of {', '.join(_ROLES)}"}), 400
+
+    # Each role has its own portal. A signup that names a portal may only
+    # create an account of that portal's role, so the Public portal cannot
+    # be used to mint a police or government account, and so on.
+    if portal:
+        if portal not in _ROLES:
+            return jsonify({"error": f"portal must be one of {', '.join(_ROLES)}"}), 400
+        if portal != role:
+            return jsonify({"error": f"This portal registers {portal} accounts only"}), 400
 
     email = str(data.get("email") or "").strip().lower()
     phone = str(data.get("phone") or "").strip()

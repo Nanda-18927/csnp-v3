@@ -164,7 +164,7 @@ data.
 python tests\test_api.py
 ```
 
-117 assertions. The suite builds a **throwaway database** in a temporary
+132 assertions. The suite builds a **throwaway database** in a temporary
 directory and never touches `backend/crimesight.db`, so it is safe to run
 against a live install.
 

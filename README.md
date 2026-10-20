@@ -44,7 +44,17 @@ portal they belong to:
 
 `/login` redirects to `/login/public`. A portal accepts only an account of its
 own role — signing in with the wrong one is refused and the error names the
-portal to use. On the deployed site the three portals are:
+portal to use. The same rule governs sign-up: each portal fixes the access
+level, so the Public portal cannot create a police or government account and
+the server refuses a mismatched registration outright.
+
+| Role | May read | May file an FIR | May add / edit records | May delete | May manage accounts |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| Public | yes | | | | |
+| Police Officer | yes | yes | yes | | |
+| Govt Official | yes | yes | yes | yes | yes |
+
+On the deployed site the three portals are:
 
 - https://nanda27.pythonanywhere.com/login/public
 - https://nanda27.pythonanywhere.com/login/police
@@ -73,7 +83,7 @@ csnp v3/
 ├── data/                the two source spreadsheets
 ├── imports/             spreadsheet → SQL compiler (standard library only)
 ├── tests/
-│   └── test_api.py           117 assertions, runs against a throwaway DB
+│   └── test_api.py           132 assertions, runs against a throwaway DB
 ├── docs/                the written documentation, including the PDF
 └── .env.example         mail configuration template
 ```
@@ -148,7 +158,7 @@ station coordinates, district, state and PS code come from the two workbooks in
 python tests/test_api.py
 ```
 
-117 assertions across routing, both auth flows, password hashing, the permission
+132 assertions across routing, both auth flows, password hashing, the permission
 matrix for all three roles, password reset (including token expiry and
 single-use), and the relationship graph. The suite builds its own throwaway
 database and never touches `backend/crimesight.db`.

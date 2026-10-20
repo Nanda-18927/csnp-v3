@@ -345,8 +345,11 @@ check("public cannot edit an officer",
       _w("PUT", f"/api/officers/{_off0}", T_PUBLIC, {"rank": "X"}).status_code == 403)
 check("public cannot add a criminal",
       _w("POST", "/api/criminals", T_PUBLIC, {"name": "Sneaky"}).status_code == 403)
-check("public CAN file an FIR",
+check("public cannot file an FIR",
       _w("POST", "/api/cases", T_PUBLIC, {
+          "stationId": 1, "crimeType": "THEFT"}).status_code == 403)
+check("police can file an FIR",
+      _w("POST", "/api/cases", T_POLICE, {
           "stationId": 1, "crimeType": "THEFT"}).status_code == 201)
 check("public cannot add an officer",
       _w("POST", "/api/officers", T_PUBLIC, {"name": "Sneaky"}).status_code == 403)
@@ -443,6 +446,44 @@ check("unknown portal falls back to the public portal",
 
 check("the three portals are distinct URLs",
       len({"/login/public", "/login/police", "/login/admin"}) == 3, "")
+
+# ---- each portal registers its own role and no other -----------------------
+_r = c.post("/api/auth/signup", json={
+    "name": "Portal Public", "username": "portalpublic",
+    "password": "secret123", "role": "public", "portal": "public",
+    "email": "portalpublic@example.com"})
+check("a signup that matches its portal is accepted", _r.status_code == 201,
+      f"{_r.status_code} {j(_r)}")
+
+_r = c.post("/api/auth/signup", json={
+    "name": "Portal Police", "username": "portalpolice",
+    "password": "secret123", "role": "police", "portal": "police",
+    "email": "portalpolice@example.com", "badge": "7", "rank": "SI",
+    "stationCode": "PS-1"})
+check("a police signup through the police portal is accepted",
+      _r.status_code == 201, f"{_r.status_code} {j(_r)}")
+
+_r = c.post("/api/auth/signup", json={
+    "name": "Wrong Portal", "username": "wrongportal",
+    "password": "secret123", "role": "police", "portal": "public",
+    "email": "wrongportal@example.com", "badge": "7", "rank": "SI",
+    "stationCode": "PS-1"})
+check("the public portal cannot mint a police account",
+      _r.status_code == 400, f"{_r.status_code} {j(_r)}")
+
+_r = c.post("/api/auth/signup", json={
+    "name": "Wrong Portal 2", "username": "wrongportal2",
+    "password": "secret123", "role": "admin", "portal": "police",
+    "email": "wrongportal2@example.com", "designation": "SP",
+    "department": "State Police HQ"})
+check("the police portal cannot mint a government account",
+      _r.status_code == 400, f"{_r.status_code} {j(_r)}")
+
+_r = c.post("/api/auth/signup", json={
+    "name": "Bad Portal", "username": "badportal",
+    "password": "secret123", "role": "public", "portal": "not-a-portal",
+    "email": "badportal@example.com"})
+check("an unknown portal is refused", _r.status_code == 400, f"{_r.status_code} {j(_r)}")
 
 
 print()

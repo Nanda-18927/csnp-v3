@@ -123,7 +123,7 @@ Permissions are enforced in **one function**, and every write route calls it.
 def _require(action):
     role = _role_of()
     table = {
-        "add_case": ("public", "police", "admin"),
+        "add_case": ("police", "admin"),
         "add":       ("police", "admin"),
         "edit":      ("police", "admin"),
         "delete":    ("admin",),
@@ -133,16 +133,16 @@ def _require(action):
 
 | action | public | police | admin |
 | --- | :-: | :-: | :-: |
-| `add_case` | ✅ | ✅ | ✅ |
+| `add_case` | | ✅ | ✅ |
 | `add` | | ✅ | ✅ |
 | `edit` | | ✅ | ✅ |
 | `delete` | | | ✅ |
 | `admin` | | | ✅ |
 
-`add_case` exists as a separate key from `add` because Public accounts may file
-an FIR and nothing else. Widening `add` to include Public — which is what a
-naive implementation does — silently grants them officer and criminal creation
-too. The 117-assertion suite covers this specific boundary.
+`add_case` exists as a separate key from `add` so the two write tiers stay
+explicit rather than one key widening silently. A Public account may only read:
+every write route answers `403` for that role. The test suite covers this
+specific boundary.
 
 The frontend mirrors the same table in `can()` so buttons can be hidden, but the
 frontend is never the enforcement point: hiding a button is cosmetic, and the

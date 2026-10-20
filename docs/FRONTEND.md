@@ -74,6 +74,12 @@ The check is a usability guard in the browser; the authoritative permission
 check stays in the API layer, where every write is authorised against the
 session token and the role in the database.
 
+Sign-up follows the same rule. While a portal is open the access-level cards
+for the other two roles are dimmed and cannot be chosen, a line under them
+states which role the portal registers, and the request carries the portal so
+the server can refuse a mismatched registration rather than trusting the
+browser.
+
 ---
 
 ## 3. Design tokens

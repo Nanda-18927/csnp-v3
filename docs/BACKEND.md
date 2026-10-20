@@ -90,7 +90,7 @@ def _role_of():
 
 def _require(action):
     role = _role_of()
-    table = {"add_case": ("public","police","admin"),
+    table = {"add_case": ("police","admin"),
              "add":       ("police","admin"),
              "edit":      ("police","admin"),
              "delete":    ("admin",),
@@ -108,9 +108,10 @@ if denied:
     return denied
 ```
 
-`add_case` is deliberately separate from `add`. Public accounts may file an FIR
-and nothing else; widening `add` to include Public silently grants officer and
-criminal creation too. The test suite pins this boundary.
+A Public account may only read. Officers, criminals, FIRs and user records are
+closed to it — every write route answers `403` for the Public role. `add_case`
+is kept as a separate key from `add` so the two write tiers stay explicit, and
+the test suite pins this boundary.
 
 ### Guards beyond the gate
 
