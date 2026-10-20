@@ -259,7 +259,15 @@ def login():
             row = dict(row)
             row["password"] = hashed
 
-        return jsonify(_session(row))
+        session = _session(row)
+        # Remember the issued token against the account, so a request can be
+        # tied back to the citizen who raised it.
+        conn.execute(
+            "UPDATE users SET session_token = ? WHERE username = ?",
+            (session["token"], username),
+        )
+        conn.commit()
+        return jsonify(session)
     finally:
         conn.close()
 

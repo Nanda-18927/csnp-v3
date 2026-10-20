@@ -1,6 +1,6 @@
 # API reference
 
-28 endpoints. All responses are JSON except `GET /` (HTML) and
+34 endpoints. All responses are JSON except `GET /` (HTML) and
 `GET /vendor/<file>` (JavaScript).
 
 Base URL when served by Flask: `http://127.0.0.1:4000`
@@ -40,6 +40,10 @@ Missing → `401`. Malformed or wrong role → `403`.
 | delete records (`delete`) | | | ✅ |
 | user directory (`admin`) | | | ✅ |
 | public registry | | ✅ | ✅ |
+| raise a citizen request | ✅ | | |
+| reply on a request thread | ✅ | ✅ | ✅ |
+| file the FIR for a request | | ✅ | ✅ |
+| close a request | | ✅ | ✅ |
 
 ---
 
@@ -183,6 +187,73 @@ appear. **Phone numbers are stripped** — contact detail, not intelligence.
 
 ---
 
+## Citizen requests — `/api/requests`
+
+A public user cannot file an FIR. What they can do is send a **request** to the
+police station for their region. The request is delivered to that station, the
+two sides settle the matter over the message thread, and the station files the
+FIR itself once the matter is agreed. The FIR links back to the request, so
+the citizen keeps one reference and can follow the case through the analytics.
+
+| Route | Who | Does |
+| --- | --- | --- |
+| `POST /api/requests` | public | raise a request for a district or a specific station |
+| `GET /api/requests` | all | own requests (public) · the station's queue (police) · every request (official) |
+| `GET /api/requests/<id>` | all | one request with its thread and its case tracking |
+| `POST /api/requests/<id>/messages` | all | add a message to the negotiation thread |
+| `POST /api/requests/<id>/file-fir` | police, official | file the FIR the negotiation agreed on |
+| `POST /api/requests/<id>/close` | police, official | close the request |
+
+### `POST /api/requests` → 201
+
+```json
+{ "subject": "Mobile phone stolen near the park",
+  "details": "My phone was taken from the bench near the park gate.",
+  "category": "VEHICLE", "district": "Hyderabad", "state": "Telangana" }
+```
+
+`stationId` may be sent instead of `district`; otherwise the district is
+resolved to the station that covers it. The response carries the reference and
+the station the request was delivered to:
+
+```json
+{ "id": 2, "reference": "CR-2026-2", "status": "Open",
+  "station": { "name": "Hyderabad Central PS", "district": "Hyderabad",
+               "state": "Telangana" } }
+```
+
+A request starts as `Open` and becomes `Under Discussion` when either side
+replies. `400` when the subject or the details are too short, `403` for any
+account that is not a public one.
+
+### `GET /api/requests/<id>` → 200
+
+The request, its messages and — once the FIR is filed — the tracking block:
+
+```json
+{ "reference": "CR-2026-2", "status": "FIR Filed", "case_id": 277,
+  "messages": [ { "author": "public", "author_role": "public",
+                  "body": "…", "created_at": "2026-10-20 20:11" } ],
+  "tracking": { "firNumber": "FIR-2026-9790", "status": "Open",
+                "severity": "Medium", "completion": 0,
+                "district": "Hyderabad", "districtTotal": 5,
+                "districtClosed": 0 } }
+```
+
+### `POST /api/requests/<id>/file-fir` → 201
+
+Body: `crimeType`, optional `severity` and `remarks`. Creates the FIR at the
+station the request was routed to and links it back:
+
+```json
+{ "ok": true, "firNumber": "FIR-2026-9790", "caseId": 277 }
+```
+
+`403` for a public account — only the station or an official files the FIR.
+`409` if an FIR has already been filed on the request.
+
+---
+
 ## Writes
 
 ### `POST /api/cases` — `add_case`
@@ -270,4 +341,6 @@ districts · relations · stats · analytics
 **Protected read (2)** users · public-registry
 **Write (11)** cases POST/PUT/DELETE · criminals POST/PUT/DELETE ·
 officers POST/PUT/DELETE · users PUT/DELETE
+**Citizen requests (6)** requests POST/GET · requests/`<id>` GET ·
+requests/`<id>`/messages · requests/`<id>`/file-fir · requests/`<id>`/close
 **Static (5)** `/` · `/login` · `/login/<role>` · `/vendor/<file>`

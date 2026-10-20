@@ -138,6 +138,9 @@ def _require(action):
 | `edit` | | ✅ | ✅ |
 | `delete` | | | ✅ |
 | `admin` | | | ✅ |
+| `request` | ✅ | | |
+| `request_read` | ✅ | ✅ | ✅ |
+| `request_file` | | ✅ | ✅ |
 
 `add_case` exists as a separate key from `add` so the two write tiers stay
 explicit rather than one key widening silently. A Public account may only read:

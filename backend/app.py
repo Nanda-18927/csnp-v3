@@ -869,6 +869,11 @@ def _require(action):
         "edit": ("police", "admin"),
         "delete": ("admin",),
         "admin": ("admin",),
+        # Citizen requests: only the public side may raise one, and only the
+        # station (or an official) may file the FIR that comes out of it.
+        "request": ("public",),
+        "request_read": ("public", "police", "admin"),
+        "request_file": ("police", "admin"),
     }[action]
     if role is None:
         return jsonify({"error": "Authentication required"}), 401
@@ -1264,6 +1269,423 @@ def _int(value, default, minimum=None, maximum=None):
     if maximum is not None and n > maximum:
         return maximum
     return n
+
+
+# ── Citizen requests ────────────────────────────────────────────────────────
+#
+# A public user cannot file an FIR. What they can do is send a request to the
+# police station for their region. The request is delivered to that station,
+# the two sides negotiate over the message thread, and the station files the
+# FIR itself once the matter is agreed. The FIR links back to the request, so
+# the citizen keeps one reference for the whole exchange and can follow how the
+# case is progressing.
+
+
+def _next_request_reference(conn) -> str:
+    """Next free ``CR-2026-n`` reference for a citizen request."""
+    prefix = f"CR-{datetime.now().year}-"
+    best = 0
+    for row in conn.execute(
+        "SELECT reference FROM citizen_requests WHERE reference LIKE ?", (prefix + "%",)
+    ):
+        match = re.search(r"(\d+)$", row["reference"] or "")
+        if match:
+            best = max(best, int(match.group(1)))
+    return f"{prefix}{best + 1}"
+
+
+def _token_username() -> str:
+    """Username behind the bearer token.
+
+    The token itself is opaque, so the account it was issued to is looked up
+    from the session token recorded against the user row at login.
+    """
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header[:7].lower() == "bearer " else ""
+    token = token or request.headers.get("X-Session-Token", "").strip()
+    if not token:
+        return ""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT username FROM users WHERE session_token = ?", (token,)
+        ).fetchone()
+        return row["username"] if row else ""
+    finally:
+        conn.close()
+
+
+def _user_row(conn, username):
+    if not username:
+        return None
+    return conn.execute(
+        "SELECT username, role, display, station_code, district, state "
+        "FROM users WHERE LOWER(username) = LOWER(?)",
+        (username,),
+    ).fetchone()
+
+
+def _station_of_user(conn, user) -> int | None:
+    """The police station a signed-in officer belongs to, if any."""
+    if not user:
+        return None
+    code = (user.get("station_code") or "").strip()
+    if not code:
+        return None
+    row = conn.execute(
+        "SELECT id FROM police_stations WHERE ps_code = ?", (code,)
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def _request_visible_clause(conn, user, role):
+    """SQL fragment and parameters that scope a request list to the caller.
+
+    A public user sees their own requests, an officer sees the requests
+    delivered to their own station, and an official sees every request.
+    """
+    if role == "admin":
+        return "1=1", []
+    if role == "police":
+        station_id = _station_of_user(conn, user)
+        if station_id is None:
+            return "1=0", []
+        return "r.station_id = ?", [station_id]
+    return "r.username = ?", [(user or {}).get("username")]
+
+
+@app.post("/api/requests")
+def create_request():
+    """A public user sends a request to the police station for their region."""
+    denied = _require("request")
+    if denied:
+        return denied
+
+    data = _body()
+    subject = str(data.get("subject") or "").strip()
+    details = str(data.get("details") or "").strip()
+    category = str(data.get("category") or "").strip() or None
+    if len(subject) < 4:
+        return jsonify({"error": "Please give the request a subject"}), 400
+    if len(details) < 10:
+        return jsonify({"error": "Please describe the matter in a little more detail"}), 400
+
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        if user is None:
+            return jsonify({"error": "Account not found"}), 401
+
+        # Route to the station for the citizen's own region. An explicit
+        # station wins; otherwise the district is resolved to its station.
+        station_id = data.get("stationId")
+        station_id = station_id if isinstance(station_id, int) else None
+        district = str(data.get("district") or "").strip()
+        state = str(data.get("state") or "").strip()
+        if station_id is None:
+            district = district or (user.get("district") or "").strip()
+            state = state or (user.get("state") or "").strip()
+            if not district:
+                return jsonify(
+                    {"error": "Please choose the district your request belongs to"}
+                ), 400
+            row = conn.execute(
+                "SELECT id FROM police_stations WHERE district = ? "
+                "AND (? = '' OR state = ?) ORDER BY id LIMIT 1",
+                (district, state, state),
+            ).fetchone()
+            if row is None:
+                return jsonify(
+                    {"error": f"No police station is mapped for {district} yet"}
+                ), 400
+            station_id = row["id"]
+        elif not _exists(conn, "police_stations", "id", station_id):
+            return jsonify({"error": f"Unknown stationId {station_id}"}), 400
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        reference = _next_request_reference(conn)
+        cur = conn.execute(
+            """
+            INSERT INTO citizen_requests
+              (reference, username, station_id, subject, category, details,
+               status, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (reference, user["username"], station_id, subject, category, details,
+             "Open", now, now),
+        )
+        request_id = cur.lastrowid
+        conn.execute(
+            """
+            INSERT INTO citizen_request_messages
+              (request_id, author, author_role, body, created_at)
+            VALUES (?,?,?,?,?)
+            """,
+            (request_id, user["username"], "public", details, now),
+        )
+        conn.commit()
+
+        station = conn.execute(
+            "SELECT name, district, state FROM police_stations WHERE id = ?",
+            (station_id,),
+        ).fetchone()
+        return jsonify(
+            {
+                "id": request_id,
+                "reference": reference,
+                "status": "Open",
+                "station": station,
+            }
+        ), 201
+    finally:
+        conn.close()
+
+
+@app.get("/api/requests")
+def list_requests():
+    """Requests visible to the caller: own, station-wide, or all."""
+    denied = _require("request_read")
+    if denied:
+        return denied
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        clause, params = _request_visible_clause(conn, user, _role_of())
+        rows = conn.execute(
+            f"""
+            SELECT r.id, r.reference, r.username, r.subject, r.category, r.status,
+                   r.created_at, r.updated_at, r.case_id,
+                   s.name AS station_name, s.district, s.state, s.ps_code,
+                   (SELECT COUNT(*) FROM citizen_request_messages m
+                     WHERE m.request_id = r.id) AS messages,
+                   c.fir_number, c.status AS case_status, c.severity,
+                   c.completion_pct
+            FROM citizen_requests r
+            JOIN police_stations s ON s.id = r.station_id
+            LEFT JOIN cases c ON c.id = r.case_id
+            WHERE {clause}
+            ORDER BY r.updated_at DESC, r.id DESC
+            """,
+            params,
+        ).fetchall()
+        return jsonify(rows)
+    finally:
+        conn.close()
+
+
+@app.get("/api/requests/<int:request_id>")
+def get_request(request_id: int):
+    """One request with its thread and, once filed, its case tracking."""
+    denied = _require("request_read")
+    if denied:
+        return denied
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        clause, params = _request_visible_clause(conn, user, _role_of())
+        row = conn.execute(
+            f"""
+            SELECT r.*, s.name AS station_name, s.district, s.state, s.ps_code,
+                   u.display AS citizen_name
+            FROM citizen_requests r
+            JOIN police_stations s ON s.id = r.station_id
+            JOIN users u ON u.username = r.username
+            WHERE r.id = ? AND {clause}
+            """,
+            [request_id, *params],
+        ).fetchone()
+        if row is None:
+            return jsonify({"error": "No such request"}), 404
+
+        messages = conn.execute(
+            "SELECT id, author, author_role, body, created_at "
+            "FROM citizen_request_messages WHERE request_id = ? ORDER BY id",
+            (request_id,),
+        ).fetchall()
+
+        tracking = None
+        if row.get("case_id"):
+            case = conn.execute(
+                "SELECT id, fir_number, status, severity, crime_type, "
+                "completion_pct, handling FROM cases WHERE id = ?",
+                (row["case_id"],),
+            ).fetchone()
+            if case:
+                # Where the case stands against the rest of its district, so
+                # the citizen can read the progress in context.
+                district = conn.execute(
+                    """
+                    SELECT COUNT(*) AS total,
+                           SUM(CASE WHEN status = 'Closed' THEN 1 ELSE 0 END) AS closed,
+                           SUM(CASE WHEN severity = 'Critical' THEN 1 ELSE 0 END) AS critical
+                    FROM cases c JOIN police_stations ps ON ps.id = c.station_id
+                    WHERE ps.district = ?
+                    """,
+                    (row["district"],),
+                ).fetchone()
+                tracking = {
+                    "firNumber": case["fir_number"],
+                    "status": case["status"],
+                    "severity": case["severity"],
+                    "crimeType": case["crime_type"],
+                    "completion": case["completion_pct"] or 0,
+                    "handling": case["handling"],
+                    "district": row["district"],
+                    "districtTotal": (district["total"] if district else 0) or 0,
+                    "districtClosed": (district["closed"] if district else 0) or 0,
+                    "districtCritical": (district["critical"] if district else 0) or 0,
+                }
+
+        out = dict(row)
+        out["messages"] = messages
+        out["tracking"] = tracking
+        return jsonify(out)
+    finally:
+        conn.close()
+
+
+@app.post("/api/requests/<int:request_id>/messages")
+def add_request_message(request_id: int):
+    """A reply on the negotiation thread."""
+    denied = _require("request_read")
+    if denied:
+        return denied
+    body_text = str(_body().get("body") or "").strip()
+    if not body_text:
+        return jsonify({"error": "A message cannot be empty"}), 400
+    if len(body_text) > 4000:
+        return jsonify({"error": "That message is too long"}), 400
+
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        clause, params = _request_visible_clause(conn, user, _role_of())
+        row = conn.execute(
+            f"SELECT id, status FROM citizen_requests r WHERE r.id = ? AND {clause}",
+            [request_id, *params],
+        ).fetchone()
+        if row is None:
+            return jsonify({"error": "No such request"}), 404
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        conn.execute(
+            "INSERT INTO citizen_request_messages "
+            "(request_id, author, author_role, body, created_at) VALUES (?,?,?,?,?)",
+            (request_id, user["username"], _role_of(), body_text, now),
+        )
+        new_status = row["status"]
+        if row["status"] == "Open":
+            new_status = "Under Discussion"
+            conn.execute(
+                "UPDATE citizen_requests SET status = 'Under Discussion', "
+                "updated_at = ? WHERE id = ?",
+                (now, request_id),
+            )
+        conn.commit()
+        return jsonify({"ok": True, "status": new_status}), 201
+    finally:
+        conn.close()
+
+
+@app.post("/api/requests/<int:request_id>/file-fir")
+def file_fir_for_request(request_id: int):
+    """The police station files the FIR that the negotiation agreed on."""
+    denied = _require("request_file")
+    if denied:
+        return denied
+
+    data = _body()
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        clause, params = _request_visible_clause(conn, user, _role_of())
+        row = conn.execute(
+            f"""
+            SELECT r.id, r.reference, r.subject, r.category, r.station_id,
+                   r.status, r.case_id, r.username
+            FROM citizen_requests r WHERE r.id = ? AND {clause}
+            """,
+            [request_id, *params],
+        ).fetchone()
+        if row is None:
+            return jsonify({"error": "No such request"}), 404
+        if row["case_id"]:
+            return jsonify({"error": "An FIR has already been filed for this request"}), 409
+        if row["status"] == "Closed":
+            return jsonify({"error": "This request is closed"}), 409
+
+        crime_type = str(data.get("crimeType") or row["category"] or "").strip()
+        if not crime_type:
+            return jsonify({"error": "A crime type is required"}), 400
+        severity = str(data.get("severity") or "").strip() or get_severity(crime_type)
+        remarks = str(data.get("remarks") or "").strip() or (
+            f"Filed from citizen request {row['reference']}: {row['subject']}"
+        )
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        fir_number = _next_fir_number(conn)
+        cur = conn.execute(
+            """
+            INSERT INTO cases
+              (fir_number, station_id, severity, crime_type, crime_count, status,
+               handling, investigation_type, completion_pct, remarks, arrest_date,
+               photo_resolution, assign_id, case_code)
+            VALUES (?,?,?,?,1,'Open','Active','Solo',0,?,?, '1920x1080',?,?)
+            """,
+            (fir_number, row["station_id"], severity, crime_type, remarks, now,
+             user["username"], f"CASE-{row['reference']}"),
+        )
+        case_id = cur.lastrowid
+        conn.execute(
+            "UPDATE citizen_requests SET case_id = ?, status = 'FIR Filed', "
+            "updated_at = ? WHERE id = ?",
+            (case_id, now, request_id),
+        )
+        conn.execute(
+            "INSERT INTO citizen_request_messages "
+            "(request_id, author, author_role, body, created_at) VALUES (?,?,?,?,?)",
+            (request_id, user["username"], _role_of(),
+             f"FIR {fir_number} has been filed on this request. "
+             f"The citizen can follow the case from here.", now),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "firNumber": fir_number, "caseId": case_id}), 201
+    finally:
+        conn.close()
+
+
+@app.post("/api/requests/<int:request_id>/close")
+def close_request(request_id: int):
+    """Close a request once the matter is settled."""
+    denied = _require("request_file")
+    if denied:
+        return denied
+
+    conn = get_db()
+    try:
+        user = _user_row(conn, _token_username())
+        clause, params = _request_visible_clause(conn, user, _role_of())
+        row = conn.execute(
+            f"SELECT id, status FROM citizen_requests r WHERE r.id = ? AND {clause}",
+            [request_id, *params],
+        ).fetchone()
+        if row is None:
+            return jsonify({"error": "No such request"}), 404
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        conn.execute(
+            "UPDATE citizen_requests SET status = 'Closed', updated_at = ? WHERE id = ?",
+            (now, request_id),
+        )
+        conn.execute(
+            "INSERT INTO citizen_request_messages "
+            "(request_id, author, author_role, body, created_at) VALUES (?,?,?,?,?)",
+            (request_id, user["username"], _role_of(),
+             str(_body().get("note") or "This request has been closed.").strip(), now),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "status": "Closed"})
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ _USER_COLUMNS = (
     ("zone", "TEXT"),
     ("email", "TEXT"),
     ("phone", "TEXT"),
+    ("session_token", "TEXT"),
 )
 
 
@@ -114,6 +115,11 @@ def _migrate_users(conn) -> None:
     # contact columns now exist, so the lookup indexes can finally be built
     for _name, _ddl in _CONTACT_INDEXES:
         conn.execute(_ddl)
+    # the live session token of each account, so a request can be traced back
+    # to the citizen who raised it
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_users_session ON users(session_token)"
+    )
 
 
 def _migrate_criminals(conn) -> None:

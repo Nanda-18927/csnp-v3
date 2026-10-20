@@ -82,6 +82,30 @@ browser.
 
 ---
 
+## 2b. Citizen requests
+
+A Public account cannot file an FIR. What it can do is send a request to the
+police station for its region, and follow what happens next.
+
+| Screen | Who | What it shows |
+| --- | --- | --- |
+| **Requests** | public | *My Requests* — the requests this citizen sent, with the state of each |
+| **Requests** | police, official | *Station Requests* — the queue delivered to this station (every station for an official) |
+
+The thread modal holds the whole exchange: the citizen's opening message, the
+station's replies and the citizen's answers, each tagged with its author and
+time. A public account can add to the thread; an officer can also file the FIR
+from it, which creates the case, links it back to the request and adds a
+system message saying so.
+
+Once an FIR exists, the tracking block under the thread shows the FIR number,
+the crime type, the severity, the case status, a progress bar built from the
+case's completion percentage and how the case sits against the rest of its
+district. That is the same case record the case register and the analytics
+board read, so a request that becomes an FIR is counted everywhere at once.
+
+---
+
 ## 3. Design tokens
 
 All theming runs through CSS variables declared once on `:root`.

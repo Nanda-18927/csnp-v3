@@ -113,3 +113,38 @@ CREATE TABLE IF NOT EXISTS police_stations (
             used_at     TEXT,
             PRIMARY KEY (username, token_hash)
         );
+
+        -- Citizen requests. A public user raises a request against the police
+        -- station for their own region. The request is delivered to that
+        -- station, the two negotiate over the message thread, and the station
+        -- files the FIR itself - which links back to the request, so the
+        -- citizen can follow the case through the analytics.
+        CREATE TABLE IF NOT EXISTS citizen_requests (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference   TEXT NOT NULL UNIQUE,
+            username    TEXT NOT NULL,
+            station_id  INTEGER NOT NULL,
+            subject     TEXT NOT NULL,
+            category    TEXT,
+            details     TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'Open',
+            case_id     INTEGER,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            FOREIGN KEY (station_id) REFERENCES police_stations(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_requests_station ON citizen_requests(station_id);
+        CREATE INDEX IF NOT EXISTS idx_requests_user    ON citizen_requests(username);
+
+        -- The negotiation thread: every message exchanged between the public
+        -- user and the police station that received the request.
+        CREATE TABLE IF NOT EXISTS citizen_request_messages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id  INTEGER NOT NULL,
+            author      TEXT NOT NULL,
+            author_role TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            FOREIGN KEY (request_id) REFERENCES citizen_requests(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_reqmsg_request ON citizen_request_messages(request_id);

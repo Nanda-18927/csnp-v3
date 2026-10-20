@@ -16,9 +16,12 @@ Schema lives in `database/schema.sql` and is executed at startup.
 | `criminal_links` | 854 | the relationship graph between criminals |
 | `users` | 3 | accounts, with role and clearance |
 | `password_resets` | 0 | in-flight reset tokens (hashed) |
+| `citizen_requests` | 0 | requests raised by public users, routed to a station |
+| `citizen_request_messages` | 0 | the negotiation thread on each request |
 
 `password_resets` is empty between resets by design — rows are deleted once
-expired or spent.
+expired or spent. The two `citizen_*` tables start empty as well and fill up
+as citizens send requests.
 
 ---
 
@@ -142,11 +145,39 @@ a single composite index cannot serve "all links where b is X".
 | `badge`, `rank`, `squad`, `official_id` | TEXT | police / admin profile |
 | `station_code`, `station_name`, `district`, `state` | TEXT | posting |
 | `designation`, `department`, `zone` | TEXT | admin profile |
+| `session_token` | TEXT | the live session token, so a request can be traced to the citizen who raised it |
 
 Partial **unique** indexes on `email` and `phone`
 (`WHERE … IS NOT NULL AND … != ''`), so two Public accounts cannot share a
 reset address. Built in `database.py` after the column migration — see
 [`BACKEND.md`](BACKEND.md) for why not in the schema script.
+
+### `citizen_requests`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INTEGER PK | |
+| `reference` | TEXT UNIQUE | `CR-2026-1` — the number the citizen quotes |
+| `username` | TEXT | the public account that raised it |
+| `station_id` | INTEGER | the station the request was delivered to |
+| `subject`, `details` | TEXT | the citizen's own words |
+| `category` | TEXT | the type of matter, as chosen by the citizen |
+| `status` | TEXT | `Open` · `Under Discussion` · `FIR Filed` · `Closed` |
+| `case_id` | INTEGER | the FIR filed from this request, once there is one |
+| `created_at`, `updated_at` | TEXT | |
+
+### `citizen_request_messages`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INTEGER PK | |
+| `request_id` | INTEGER | FK to `citizen_requests`, deleted with it |
+| `author`, `author_role` | TEXT | who wrote it, and in which role |
+| `body` | TEXT | the message |
+| `created_at` | TEXT | |
+
+The first message of every request is the citizen's own text, so the thread
+reads as the whole exchange from the start.
 
 ### `password_resets`
 

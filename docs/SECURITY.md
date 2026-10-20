@@ -101,6 +101,14 @@ token that was issued. They do nothing against a client that simply writes its
 own. This is fine for a classroom demo with three seeded logins and
 inappropriate for anything else.
 
+**One step has been taken already.** The token issued at login is now recorded
+against the account (`users.session_token`), so the server can resolve *which*
+user a token belongs to. The citizen requests rely on it: a request is owned
+by the account that raised it, an officer only sees the queue of their own
+station, and the thread records who wrote each message. The **role** is still
+read out of the token string, so the self-asserting weakness above still
+stands for the role; only the identity is now server-side.
+
 ### What fixing it requires
 
 The smallest correct change is a server-side session table plus a signed or

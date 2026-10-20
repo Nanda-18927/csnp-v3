@@ -113,6 +113,14 @@ closed to it — every write route answers `403` for the Public role. `add_case`
 is kept as a separate key from `add` so the two write tiers stay explicit, and
 the test suite pins this boundary.
 
+A Public account that needs the police to act sends a **request** instead: a
+message routed to the station covering its district, a thread the two sides
+settle the matter on, and — once they agree — an FIR filed by the station and
+linked back to the request. The request routes, the thread and the FIR are
+therefore three separate steps, and the citizen keeps one reference throughout.
+The `request`, `request_read` and `request_file` actions in the same table
+gate them.
+
 ### Guards beyond the gate
 
 - **Deleting an officer or criminal with open cases** → `409`, listing the count.

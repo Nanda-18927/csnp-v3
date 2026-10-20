@@ -83,7 +83,7 @@ csnp v3/
 ├── data/                the two source spreadsheets
 ├── imports/             spreadsheet → SQL compiler (standard library only)
 ├── tests/
-│   └── test_api.py           132 assertions, runs against a throwaway DB
+│   └── test_api.py           151 assertions, runs against a throwaway DB
 ├── docs/                the written documentation, including the PDF
 └── .env.example         mail configuration template
 ```
@@ -128,6 +128,7 @@ and Chrome does the printing.
 | `criminals` | 211 |
 | `officers` | 190 |
 | `users` | 3 |
+| `citizen_requests` | grows with use |
 
 Every station, officer, criminal and FIR is real South India source data —
 station coordinates, district, state and PS code come from the two workbooks in
@@ -147,6 +148,11 @@ station coordinates, district, state and PS code come from the two workbooks in
 - **Public registry** — police and Govt Officials can see citizen accounts only.
   Department accounts never appear on that route.
 - **Analytics volume** — a four-quadrant 3D command board over the live totals.
+- **Citizen requests** — a Public account cannot file an FIR. It sends a
+  request to the police station for its own region; the station replies on the
+  thread, and once the matter is agreed the station files the FIR. The request
+  keeps one reference, the citizen follows the case through the analytics, and
+  the FIR is on the case register like any other.
 - **Role-aware everything** — three tiers, enforced in the database-facing
   layer rather than by hiding buttons.
 
@@ -158,7 +164,7 @@ station coordinates, district, state and PS code come from the two workbooks in
 python tests/test_api.py
 ```
 
-132 assertions across routing, both auth flows, password hashing, the permission
+151 assertions across routing, both auth flows, password hashing, the permission
 matrix for all three roles, password reset (including token expiry and
 single-use), and the relationship graph. The suite builds its own throwaway
 database and never touches `backend/crimesight.db`.

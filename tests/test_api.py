@@ -447,6 +447,79 @@ check("unknown portal falls back to the public portal",
 check("the three portals are distinct URLs",
       len({"/login/public", "/login/police", "/login/admin"}) == 3, "")
 
+# ---- citizen requests ------------------------------------------------------
+# A public user cannot file an FIR. They send a request to the station for
+# their region, the two negotiate over the thread, and the station files the
+# FIR itself - which the citizen then follows as a case.
+_r = _w("POST", "/api/requests", T_PUBLIC, {
+    "subject": "Mobile phone stolen near the park",
+    "details": "My phone was taken from the bench near the park gate.",
+    "category": "VEHICLE",
+    "district": "Hyderabad",
+    "state": "Telangana"})
+check("a public user can raise a request", _r.status_code == 201, f"{_r.status_code} {j(_r)}")
+_req = j(_r) or {}
+_req_id = _req.get("id")
+
+check("the request is routed to a station in the citizen's district",
+      (_req.get("station") or {}).get("district") == "Hyderabad", str(_req.get("station")))
+check("the request starts open", _req.get("status") == "Open", str(_req.get("status")))
+
+_r = _w("GET", "/api/requests", T_PUBLIC)
+check("the citizen sees their own request",
+      any(x["id"] == _req_id for x in (j(_r) or [])), str(_r))
+
+_r = _w("POST", "/api/requests", T_POLICE,
+        {"subject": "Officer request", "details": "this should not be allowed"})
+check("an officer cannot raise a request", _r.status_code == 403, _r.status_code)
+
+_r = _w("GET", "/api/requests", T_POLICE)
+check("the station sees the request delivered to it",
+      any(x["id"] == _req_id for x in (j(_r) or [])), str(_r))
+
+_r = _w("POST", f"/api/requests/{_req_id}/messages", T_POLICE,
+        {"body": "Bring the receipt to the station."})
+check("the station can reply on the thread", _r.status_code == 201, _r.status_code)
+
+_r = _w("POST", f"/api/requests/{_req_id}/messages", T_PUBLIC,
+        {"body": "I will come tomorrow morning."})
+check("the citizen can reply on the thread", _r.status_code == 201, _r.status_code)
+
+_r = _w("GET", f"/api/requests/{_req_id}", T_PUBLIC)
+check("the thread holds every message",
+      len((j(_r) or {}).get("messages") or []) >= 3, str(j(_r)))
+check("the request is under discussion",
+      (j(_r) or {}).get("status") == "Under Discussion",
+      str((j(_r) or {}).get("status")))
+
+_r = _w("POST", f"/api/requests/{_req_id}/file-fir", T_PUBLIC, {"crimeType": "VEHICLE"})
+check("a citizen cannot file the FIR themselves", _r.status_code == 403, _r.status_code)
+
+_r = _w("POST", f"/api/requests/{_req_id}/file-fir", T_POLICE,
+        {"crimeType": "VEHICLE", "severity": "Medium"})
+check("the station can file the FIR", _r.status_code == 201, f"{_r.status_code} {j(_r)}")
+_fir = (j(_r) or {}).get("firNumber")
+
+_r = _w("POST", f"/api/requests/{_req_id}/file-fir", T_POLICE, {"crimeType": "VEHICLE"})
+check("the FIR can only be filed once", _r.status_code == 409, _r.status_code)
+
+_r = _w("GET", f"/api/requests/{_req_id}", T_PUBLIC)
+_track = (j(_r) or {}).get("tracking") or {}
+check("the citizen can follow the case", _track.get("firNumber") == _fir, str(_track))
+check("the tracking carries the case progress", "completion" in _track, str(_track))
+check("the request is marked as filed",
+      (j(_r) or {}).get("status") == "FIR Filed", str((j(_r) or {}).get("status")))
+
+_r = _w("GET", "/api/cases?limit=300", T_PUBLIC)
+check("the FIR is on the case register",
+      any(x.get("fir_number") == _fir for x in (j(_r) or [])), "not on the register")
+
+_r = _w("POST", f"/api/requests/{_req_id}/close", T_POLICE, {})
+check("the station can close the request", _r.status_code == 200, _r.status_code)
+_r = _w("POST", f"/api/requests/{_req_id}/close", T_PUBLIC, {})
+check("a citizen cannot close their own request", _r.status_code == 403, _r.status_code)
+
+
 # ---- each portal registers its own role and no other -----------------------
 _r = c.post("/api/auth/signup", json={
     "name": "Portal Public", "username": "portalpublic",
