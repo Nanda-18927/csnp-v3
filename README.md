@@ -31,6 +31,25 @@ there is no second server and no build step.
 > These are seeded demo credentials for a coursework project. They are printed
 > nowhere in the running app — see [`docs/SECURITY.md`](docs/SECURITY.md).
 
+### Access portals
+
+Every role signs in through its own front door, so nobody has to guess which
+portal they belong to:
+
+| Portal | URL | Role | Demo account |
+| --- | --- | --- | --- |
+| Public | `/login/public` | Public | `public` / `public123` |
+| Police Officer | `/login/police` | Police Officer | `officer` / `police123` |
+| Govt Official | `/login/admin` | Govt Official | `admin` / `govt2026` |
+
+`/login` redirects to `/login/public`. A portal accepts only an account of its
+own role — signing in with the wrong one is refused and the error names the
+portal to use. On the deployed site the three portals are:
+
+- https://nanda27.pythonanywhere.com/login/public
+- https://nanda27.pythonanywhere.com/login/police
+- https://nanda27.pythonanywhere.com/login/admin
+
 ---
 
 ## Repository layout

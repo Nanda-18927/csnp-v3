@@ -28,7 +28,7 @@ files are missing.
   SVG sprite       16 icon symbols, referenced by <use href="#i-map">
   .atmo            background atmosphere (grid, glow, haze)
   #dome-entrance   metallic split-dome intro
-  #login-screen    sign in / sign up
+  #login-screen    access portals / sign in / sign up
   #app             the application shell
     .navbar        brand + section tabs + role badge + exit
     #rolebar       access-level banner, shown after sign-in
@@ -37,13 +37,42 @@ files are missing.
     #section-cases     / .section-analytics / .section-officers
     #section-criminals / .section-map
   modals           FIR form, criminal form, case detail, criminal dossier
-<script src=vendor/…>
+<script src=/vendor/…>
 <script>           all application logic
 ```
 
 The SVG sprite is why there is no emoji anywhere: every icon is an outlined
 path that inherits `currentColor`, so it matches the surrounding text at any
 size and in any colour.
+
+---
+
+## 2a. The three access portals
+
+Each role has its own front door, so a user is never asked to guess which
+portal they belong to:
+
+| Portal | URL | Role |
+| --- | --- | --- |
+| Public | `/login/public` | public |
+| Police Officer | `/login/police` | police |
+| Govt Official | `/login/admin` | admin |
+
+`/login` redirects to `/login/public`. The three routes are served by Flask
+(`backend/app.py`) and all return the same document; the frontend reads
+`location.pathname`, marks the matching portal as selected, retitles the card
+to that role's access portal and preselects the same role on the sign-up tab.
+
+Switching portals client-side calls `history.pushState`, so the URL is always
+shareable and the browser back button works, but the page never reloads and the
+dome intro does not replay.
+
+A portal only accepts an account of its own role. `doLogin()` compares the
+role in the login response with the portal that was opened and refuses the
+mismatch — the session is discarded and the error names the portal to use.
+The check is a usability guard in the browser; the authoritative permission
+check stays in the API layer, where every write is authorised against the
+session token and the role in the database.
 
 ---
 

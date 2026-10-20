@@ -237,7 +237,16 @@ district, state, department, zone, email, phone.
 | Route | Serves |
 | --- | --- |
 | `GET /` | `frontend/index.html` |
+| `GET /login` | `302` to `/login/public` |
+| `GET /login/public` | `frontend/index.html` — the citizen portal |
+| `GET /login/police` | `frontend/index.html` — the police officer portal |
+| `GET /login/admin` | `frontend/index.html` — the government official portal |
 | `GET /vendor/<file>` | `three.min.js`, `OrbitControls.js` |
+
+The three portal routes serve the same document. The frontend reads the path,
+titles the form for that role and refuses an account belonging to a different
+one; the role check itself lives in the browser, the server hands out the same
+session token either way.
 
 ---
 
@@ -250,4 +259,4 @@ districts · relations · stats · analytics
 **Protected read (2)** users · public-registry
 **Write (11)** cases POST/PUT/DELETE · criminals POST/PUT/DELETE ·
 officers POST/PUT/DELETE · users PUT/DELETE
-**Static (2)** `/` · `/vendor/<file>`
+**Static (5)** `/` · `/login` · `/login/<role>` · `/vendor/<file>`

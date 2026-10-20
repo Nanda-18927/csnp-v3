@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 from flask_cors import CORS
 
 # Make the repository root importable no matter where the process is started.
@@ -131,6 +131,36 @@ def index():
         return jsonify(
             {"error": f"Frontend not found at {FRONTEND_FILE}"}
         ), 500
+    return send_from_directory(str(FRONTEND_FILE.parent), FRONTEND_FILE.name)
+
+
+# ── Access portals ──────────────────────────────────────────────────────────
+#
+# The three roles sign in through three different URLs, mirroring the way
+# each role is given its own front door on the deployed site:
+#
+#   /login/public   citizen portal
+#   /login/police   police officer portal
+#   /login/admin    government official portal
+#
+# All three serve the same single-page document. The frontend reads the path,
+# titles the form for that role and refuses an account of a different role.
+
+LOGIN_ROLES = ("public", "police", "admin")
+
+
+@app.get("/login")
+def login_redirect():
+    """Send a bare /login to the citizen portal."""
+    return redirect("/login/public")
+
+
+@app.get("/login/<role>")
+def role_login(role: str):
+    """Serve the application for one of the three role portals."""
+    role = (role or "").strip().lower()
+    if role not in LOGIN_ROLES:
+        return redirect("/login/public")
     return send_from_directory(str(FRONTEND_FILE.parent), FRONTEND_FILE.name)
 
 

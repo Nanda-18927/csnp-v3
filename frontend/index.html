@@ -234,6 +234,17 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--f-m
 
 .lswitch{font-size:11px;color:var(--txm);text-align:center}.lswitch span{color:var(--p4);cursor:pointer;font-weight:600}.lswitch span:hover{color:var(--p3)}
 
+/* ACCESS PORTALS */
+.lportals{width:100%;display:flex;flex-direction:column;gap:6px}
+.lportals-label{font-size:9px;color:var(--txm);letter-spacing:.22em;text-transform:uppercase;text-align:center;margin-bottom:2px}
+.lportal{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 13px;border:1px solid var(--gbr);border-radius:var(--r2);background:var(--bg7);color:var(--txm);text-decoration:none;cursor:pointer;transition:.2s}
+.lportal:hover{border-color:var(--gbrh);color:var(--acc);box-shadow:0 0 16px rgba(56,225,255,.14)}
+.lportal.sel{border-color:var(--acc);background:rgba(124,196,255,.1);box-shadow:0 0 18px rgba(56,225,255,.2)}
+.lportal-name{font-family:var(--f-d);font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.lportal-desc{font-size:9.5px;letter-spacing:.03em;text-align:right;opacity:.8}
+.lportal.sel .lportal-name{color:var(--acc)}
+.lportals-hint{font-size:9.5px;color:var(--txm);letter-spacing:.12em;text-transform:uppercase;text-align:center;margin-top:2px}
+
 /* NAV */
 #app{height:100%;display:flex;flex-direction:column}
 .navbar{height:var(--nh);background:linear-gradient(180deg,rgba(7,18,38,.92),rgba(4,11,24,.9));backdrop-filter:blur(22px);border-bottom:1px solid var(--gbr);display:flex;align-items:center;padding:0 14px;gap:12px;flex-shrink:0;z-index:1000;box-shadow:0 1px 0 rgba(56,225,255,.25),0 14px 40px rgba(0,0,0,.5)}
@@ -948,7 +959,25 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;
     </div>
     <div class="llogo">🛡️</div>
     <div class="ltitle">Crime Sight Noir</div>
-    <div class="lsub">Cybersecurity Intelligence Console</div>
+    <div class="lsub" id="lsub">Cybersecurity Intelligence Console</div>
+
+    <!-- ACCESS PORTALS: one link per role -->
+    <div class="lportals">
+      <div class="lportals-label">Select Access Portal</div>
+      <a class="lportal" href="/login/public" data-portal="public">
+        <span class="lportal-name">Public</span>
+        <span class="lportal-desc">Open registry and public intelligence</span>
+      </a>
+      <a class="lportal" href="/login/police" data-portal="police">
+        <span class="lportal-name">Police Officer</span>
+        <span class="lportal-desc">Station, FIR and suspect access</span>
+      </a>
+      <a class="lportal" href="/login/admin" data-portal="admin">
+        <span class="lportal-name">Govt Official</span>
+        <span class="lportal-desc">Full database administration</span>
+      </a>
+      <div class="lportals-hint" id="lportal-hint">Choose a portal to begin</div>
+    </div>
 
     <!-- Auth Tabs -->
     <div class="ltabs" style="width:100%">
@@ -1579,8 +1608,8 @@ function startIntroSequence() {
 
 <div class="toast hidden" id="toast"></div>
 
-<script src="vendor/three.min.js"></script>
-<script src="vendor/OrbitControls.js"></script>
+<script src="/vendor/three.min.js"></script>
+<script src="/vendor/OrbitControls.js"></script>
 <script>
 /* ===== DATA ===== */
 /* API base URL.
@@ -1869,6 +1898,59 @@ function selectRole(r){
   }
 }
 
+/* ── Access portals ─────────────────────────────────────────────────────────
+   Each role signs in through its own front door. The URL carries the portal
+   (/login/public, /login/police, /login/admin), the form is titled for it and
+   it refuses an account that belongs to a different one. */
+const PORTALS = {
+  public: {name:'Public',         sub:'Public Access Portal'},
+  police: {name:'Police Officer', sub:'Police Officer Access Portal'},
+  admin:  {name:'Govt Official',  sub:'Govt Official Access Portal'}
+};
+let portalRole = null;
+
+function portalFromPath(){
+  const m = (location.pathname.match(/^\/login\/(public|police|admin)\/?$/) || [])[1];
+  return m || null;
+}
+
+function portalRoleName(role){
+  return (PORTALS[role] && PORTALS[role].name) || role;
+}
+
+function setPortal(role, keepUrl){
+  if(role && !PORTALS[role]) role = null;
+  portalRole = role;
+  document.querySelectorAll('.lportal').forEach(function(a){
+    a.classList.toggle('sel', a.dataset.portal === role);
+  });
+  const sub = document.getElementById('lsub');
+  if(sub) sub.textContent = role ? PORTALS[role].sub : 'Cybersecurity Intelligence Console';
+  const hint = document.getElementById('lportal-hint');
+  if(hint) hint.textContent = role ? ('Signing in to the ' + PORTALS[role].name + ' portal') : 'Choose a portal to begin';
+  if(!keepUrl){
+    const url = role ? ('/login/' + role) : '/';
+    if(location.pathname !== url) history.pushState({portal:role}, '', url);
+  }
+  /* keep the sign-up role in step with the chosen portal */
+  if(role) selectRole(role);
+}
+
+function wirePortals(){
+  document.querySelectorAll('.lportal').forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      setPortal(a.dataset.portal);
+      const lerr = document.getElementById('lerr');
+      if(lerr) lerr.classList.add('hidden');
+    });
+  });
+  window.addEventListener('popstate', function(){ setPortal(portalFromPath(), true); });
+  setPortal(portalFromPath(), true);
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wirePortals);
+else wirePortals();
+
 async function doLogin(){
   const u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;
   try {
@@ -1878,6 +1960,19 @@ async function doLogin(){
     });
     if (!res.ok) throw new Error(await apiError(res, 'Login failed'));
     CU = await res.json();
+    /* a portal only accepts an account of its own role */
+    if(portalRole && CU.role !== portalRole){
+      const wrong = portalRoleName(CU.role);
+      CU = null;
+      window.CSN_TOKEN = '';
+      localStorage.removeItem('csn');
+      localStorage.removeItem('csn_token');
+      const lerr = document.getElementById('lerr');
+      lerr.innerHTML = '⚠ This is a ' + wrong + ' account. Sign in through the ' + portalRoleName(portalRole) + ' portal.';
+      lerr.classList.remove('hidden');
+      document.getElementById('lp').value = '';
+      return;
+    }
     /* the opaque token is what the write endpoints authorise against */
     window.CSN_TOKEN = (CU.session && CU.session.token) || CU.token || '';
     localStorage.setItem('csn', JSON.stringify(CU));

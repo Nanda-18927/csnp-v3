@@ -421,6 +421,30 @@ _r = c.post("/api/auth/forgot-password", json={"identifier": "919000000001"})
 check("reset by bare digits works", _r.status_code == 200, f"{_r.status_code} {j(_r)}")
 
 
+# ── access portals ──────────────────────────────────────────────────────────
+# Each role has its own front door. All three serve the same document; the
+# frontend reads the path to title the form and to refuse a mismatched role.
+for _role in ("public", "police", "admin"):
+    _r = c.get(f"/login/{_role}")
+    check(f"/login/{_role} serves the app",
+          _r.status_code == 200 and b"Crime Sight Noir" in _r.data, _r.status_code)
+    check(f"/login/{_role} exposes its portal link",
+          f'href="/login/{_role}"'.encode() in _r.data, "portal link missing")
+
+_r = c.get("/login")
+check("/login redirects to the public portal",
+      _r.status_code == 302 and _r.headers.get("Location", "").endswith("/login/public"),
+      f"{_r.status_code} {_r.headers.get('Location')}")
+
+_r = c.get("/login/not-a-role")
+check("unknown portal falls back to the public portal",
+      _r.status_code == 302 and _r.headers.get("Location", "").endswith("/login/public"),
+      f"{_r.status_code} {_r.headers.get('Location')}")
+
+check("the three portals are distinct URLs",
+      len({"/login/public", "/login/police", "/login/admin"}) == 3, "")
+
+
 print()
 print(f"passed={len(PASSES)} failed={len(FAILURES)}")
 for f in FAILURES:
